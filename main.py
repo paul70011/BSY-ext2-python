@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 ext2File = open('agwc.txt', 'rb')
@@ -147,27 +148,61 @@ def saveFile(inode, fileName):
     newFile.write(bytes)
 
 def getDirectoryInfo(inode):
+    directory = []
     pointers = getInodeDataPointers(inode)
     block = getBlock(pointers[0])
     b = 0
     while True:
-        entry = block[b:]
-        inode_number = toInt(entry[0:4])
-        if inode_number == 0:
-            return
-        print('Inode number:', inode_number)
-        rec_length = toInt(entry[4:6])
-        print('Rec length:', rec_length)
-        name_length = toInt(entry[6:7])
-        print('Name length:', name_length)
-        file_type = toInt(entry[7:8])
-        print('File type:', file_type)
+        entry = {}
+        entryBytes = block[b:]
+
+        entry['inode_number'] = toInt(entryBytes[0:4])
+        if entry['inode_number'] == 0:
+            return directory
+
+        entry['rec_length'] = toInt(entryBytes[4:6])
+        entry['name_length'] = toInt(entryBytes[6:7])
+        entry['file_type'] = toInt(entryBytes[7:8])
+
         chars = []
-        for i in range(name_length):
-            chars.append(chr(entry[8+i:8+i+1][0]))
-        print(''.join(chars))
-        b += rec_length
+        for i in range(entry['name_length']):
+            chars.append(chr(entryBytes[8+i:8+i+1][0]))
+        entry['name'] = ''.join(chars)
+
+        b += entry['rec_length']
+        directory.append(entry)
+
+def printDirectoryInfo(inode):
+    directory = getDirectoryInfo(inode)
+    for entry in directory:
+        print('Inode number:\t', entry['inode_number'])
+        print('Rec length:\t', entry['rec_length'])
+        print('Name length:\t', entry['name_length'])
+        print('File type:\t', entry['file_type'])
+        print('Name:\t\t', entry['name'])
         print()
 
-getDirectoryInfo(getInode(14 - 1))
-saveFile(getInode(12 - 1), 'agwc.jpg')
+# Manual
+# printDirectoryInfo(getInode(14 - 1))
+# saveFile(getInode(12 - 1), 'agwc.jpg')
+
+# Automatic
+root = getDirectoryInfo(getInode(2 - 1))
+try:
+    os.mkdir('root')
+except Exception as e:
+    quit(e)
+os.chdir('root')
+
+def createFolderStructure(directory):
+    for entry in directory:
+        if entry['file_type'] == 2 and entry['name'] != '.' and entry['name'] != '..':
+            os.mkdir(entry['name'])
+            currDir = os.getcwd()
+            os.chdir(entry['name'])
+            createFolderStructure(getDirectoryInfo(getInode(entry['inode_number'] - 1)))
+            os.chdir(currDir)
+        elif entry['file_type'] == 1:
+            saveFile(getInode(entry['inode_number'] - 1), entry['name'])
+
+createFolderStructure(root)
